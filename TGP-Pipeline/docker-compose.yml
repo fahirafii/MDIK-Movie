@@ -1,0 +1,59 @@
+
+version: "3.8"
+
+services:
+  spark:
+    image: bitnami/spark:3.3
+    container_name: tgp-spark
+    environment:
+      - SPARK_MODE=master
+    volumes:
+      - ./data:/app
+      - ./load_reviews_to_hive.py:/opt/spark-apps/load_reviews_to_hive.py
+    ports:
+      - "4040:4040"
+    command: tail -f /dev/null
+    networks:
+      - tgp-network
+
+  presto:
+    image: trinodb/trino:latest
+    container_name: tgp-presto
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./presto/catalog:/etc/trino/catalog
+      - ./data:/opt/bitnami/spark/warehouse
+    networks:
+      - tgp-network
+
+  superset:
+    image: apache/superset:2.1.0
+    container_name: tgp-superset
+    environment:
+      - SUPERSET_SECRET_KEY=mysecretkey
+      - PYTHONPATH=/app/pythonpath
+    ports:
+      - "8088:8088"
+    volumes:
+      - superset_home:/app/superset_home
+    depends_on:
+      - presto
+    extra_hosts:
+      - "tgp-presto:172.19.0.3"
+    networks:
+      - tgp-network
+    command: >
+      /bin/sh -c "
+      superset db upgrade &&
+      superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@superset.com --password admin123 &&
+      superset init &&
+      superset run -h 0.0.0.0 -p 8088
+      "
+
+volumes:
+  superset_home:
+
+networks:
+  tgp-network:
+    name: tgp-network
